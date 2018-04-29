@@ -19,7 +19,9 @@
 //    [self serialOrConcurrentQueue];
 //    [self MianOrGlobalDispatchQueue];
 //    [self setTargetQueue];
-    [self disptachGroup];
+//    [self disptachGroup];
+//    [self dispatchBarrier];
+    [self dispatchSync];
 }
 #pragma mark  并行队列与串行队列
 -(void)serialOrConcurrentQueue{
@@ -204,10 +206,91 @@ static dispatch_time_t getDispatchTimeByDate( NSDate *date){
         sleep(1);
         NSLog(@"group  queue1 1 after...");
     });
-    dispatch_group_notify(group, dispatch_get_main_queue(), ^{
-        NSLog(@"group 追加的block全部执行完，执行这个block done");
-
-    });
+    
+    //1 等待group中的block全部执行完，不会阻塞当前线程 推荐使用dispatch_group_notify
+//    dispatch_group_notify(group, dispatch_get_main_queue(), ^{
+//        NSLog(@"group 追加的block全部执行完，执行这个block done");
+//    });
+//    //2 等待group中的block全部执行完，会阻塞当前线程
+//    dispatch_group_wait(group, DISPATCH_TIME_FOREVER);
+    //3 等待x时间，再返回结果，会阻塞当前线程，返回值为0，group全部处理完，否则还有线程在处理
+    dispatch_time_t time = dispatch_time(DISPATCH_TIME_NOW, 1ull*NSEC_PER_SEC);
+    long result = dispatch_group_wait(group, time);
+    NSLog(@"result %ld",result);
+    //立即返回
+//    dispatch_group_wait(group, DISPATCH_TIME_NOW);
+    
+    NSLog(@"------------");
 }
 
+#pragma mark dispatch_barrier_async
+-(void)dispatchBarrier{
+    /*
+     dispatch_barrier_async函数会等待追加到concurent dispatch queue上的并行执行的处理
+     全部结束之后，再将指定的处理追加到该concurent dispatch queue中。然后在由dispatch_barrier_async
+     函数追加的处理执行完毕后，concurent才恢复为一般的动作，追加到该concurent的处理才又开始并行执行.
+     */
+    
+    dispatch_queue_t cqueue = dispatch_queue_create("com.kzw.dispatchBarrier", DISPATCH_QUEUE_CONCURRENT);
+    dispatch_async(cqueue, ^{
+        NSLog(@"cqueue async1 before...");
+        sleep(1);
+        NSLog(@"cqueue async1 after...");
+
+    });
+    dispatch_async(cqueue, ^{
+        NSLog(@"cqueue async2 before...");
+        sleep(2);
+        NSLog(@"cqueue async2 after...");
+    });
+    dispatch_async(cqueue, ^{
+        NSLog(@"cqueue async3 before...");
+        sleep(3);
+        NSLog(@"cqueue async3 after...");
+    });
+    dispatch_barrier_async(cqueue, ^{
+        NSLog(@"cqueue barrier_async before...");
+        sleep(1);
+        NSLog(@"cqueue barrier_async after...");
+    });
+    dispatch_async(cqueue, ^{
+        NSLog(@"cqueue async4 before...");
+        sleep(1);
+        NSLog(@"cqueue async4 after...");
+        
+    });
+    dispatch_async(cqueue, ^{
+        NSLog(@"cqueue async5 before...");
+        sleep(1);
+        NSLog(@"cqueue async5 after...");
+        
+    });
+
+}
+#pragma mark dispatch_sync
+-(void)dispatchSync{
+    //串行执行
+    dispatch_queue_t queue = dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0);
+    dispatch_sync(queue, ^{
+        NSLog(@"queue sync1 before...");
+        sleep(1);
+        NSLog(@"queue sync1 after...");
+    });
+    dispatch_sync(queue, ^{
+        NSLog(@"queue sync2 before...");
+        sleep(1);
+        NSLog(@"queue sync2 after...");
+    });
+    /*
+     一旦调用dispatch_sync函数，那么在指定的处理执行结束之前，该函数不会反悔。
+     sync函数可简化源代码，也可说是简化版的dispatch_group_wait函数
+     容易死锁， 主线程执行sync就会死锁。
+     sync在main线程中执行指定block，并等待其执行结束。而其实在
+     主线中正在执行这些sync的代码，所以无法执行追加到main的block
+     */
+}
+#pragma mark dispatch_apply
+-(void)dispatchApply{
+    
+}
 @end
