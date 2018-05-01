@@ -21,7 +21,10 @@
 //    [self setTargetQueue];
 //    [self disptachGroup];
 //    [self dispatchBarrier];
-    [self dispatchSync];
+//    [self dispatchSync];
+//    [self dispatchApply];
+//    [self dispatchSemaphore];
+    [self dispatchSource];
 }
 #pragma mark  并行队列与串行队列
 -(void)serialOrConcurrentQueue{
@@ -291,6 +294,184 @@ static dispatch_time_t getDispatchTimeByDate( NSDate *date){
 }
 #pragma mark dispatch_apply
 -(void)dispatchApply{
+    /*
+     apply 函数是sync函数和group的关联api。该函数按指定的次数
+     将指定的block追加到指定的queue中，并等待全部处理执行结束。
+     
+     */
     
+//    dispatch_queue_t queue = dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0);
+//    dispatch_apply(10, queue, ^(size_t index) {
+//        NSLog(@"index %ld",index);
+//    });
+//    NSLog(@"dispatch_apply done....");
+    
+    /*
+      由于dispatch_apply函数与dispatch_sync函数相同，会等待处理执行结束，
+     因此推荐在dispatch_async函数中非同步执行dispatch_apply函数
+     */
+    dispatch_queue_t queue = dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0);
+    
+    NSArray * arr = @[@1,@2,@3,@4];
+    /*
+     在Global Dispatch Queue中非同步执行
+     */
+    dispatch_async(queue, ^{
+        NSLog(@"async before : %@",[NSThread currentThread]);
+
+        /*
+          Global Dispatch Queue
+         等待dispatch_apply 函数中全部处理执行结束
+         */
+        dispatch_apply([arr count], queue, ^(size_t index) {
+            NSLog(@"thread : %@ %zu : %@",[NSThread currentThread],index,arr[index]);
+            
+        });
+        NSLog(@"async after : %@",[NSThread currentThread]);
+
+        dispatch_async(dispatch_get_main_queue(), ^{
+            NSLog(@"main done : %@",[NSThread currentThread]);
+        });
+        
+    });
+}
+#pragma mark dispatch_suspend/dispatch_resume
+/*
+   当追加大量处理到 dispatch queue时，在追加处理的过程中，有时希望不执行已追加的
+ 处理。例如演算结果被block截获时，一些处理会对这个演算结果造成影响。
+ dispatch_suspend 函数挂起指定dipatch queue。
+ dispatch_suspend(queue);
+ dispatch_resume函数恢复指定的 dispatch queue
+ dispatch_resume(queue);
+ 这些函数对已经执行的处理没有影响。挂起后，追加到 dispatch queue中但尚未执行的处理
+ 在此之后停止执行。而恢复则使得这些处理能够继续执行。
+ */
+
+#pragma mark Dispatch Semaphore
+-(void)dispatchSemaphore{
+    /*
+    dispatch_queue_t queue = dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0);
+    NSMutableArray  *array = [NSMutableArray array];
+    for (int i=0; i<100000; ++i) {
+        dispatch_async(queue, ^{
+            [array addObject:@(i)];
+        });
+    }
+     因为该源码使用global dispatch queue 更新NSMutableArray类对象，所以执行后由内存
+     错误导致应用程序异常结束的概率很高。此时应使用Dispatch Semaphore
+     */
+    /*
+     Dispatch Semaphore 是持有计数的信号。该计数是多线程编程中的计数类型信号。所谓信号，
+     类似于过马路时常用的手旗，可以通过时举起手旗，不可通过时放下手旗。而在Dispatch Semaphore
+     中，使用计数来实现该功能。计数为0时等待，计数为1或大于1时，减去1而不等待。
+     
+     */
+    
+    dispatch_queue_t queue = dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0);
+    
+    /*
+       生成Dispatch Semaphore。
+     Dispatch Semaphore的计数初始值设定为“1”
+     保证可访问NSMutableArray类对象的线程同时只能有1个
+     */
+    dispatch_semaphore_t semaphore = dispatch_semaphore_create(1);
+    
+    NSMutableArray  *arr = [NSMutableArray array];
+    for (int i=0; i<100; i++) {
+        dispatch_async(queue, ^{
+            /*
+                等待 Dispatch Semaphore
+             一直等待，知道Dispatch Semaphore的计数达到大于等于1
+             */
+           long semwait = dispatch_semaphore_wait(semaphore, DISPATCH_TIME_FOREVER);
+            
+            NSLog(@"semwait: %ld",semwait);
+            if(semwait==0){
+                /*
+                 由于Dispatch Semaphore的计数值达到大于等于1
+                 或者在等待中的指定时间内Dispatch Semaphore的计数达到大于等于1
+                 所有Dispatch Semaphore的计数值减去1
+                 
+                 可执行需要进行排他控制的处理
+                 */
+            }else{
+                /*
+                 由于Dispatch Semaphore的计数值为0
+                 因此在达到指定时间为止待机
+                 */
+            }
+            
+            /*
+               由于Dispatch Semaphore的计数值达到大于等于1
+             所以将Dispatch Semaphore的计数值减去1
+             dispatch_semaphore_wait函数执行返回。
+             
+             即执行到此时的Dispatch Semaphore的计数值恒为‘0’
+             
+             由于可访问NSMutabArray类对象的线程只有一个因此可安全的进行更新
+             */
+            [arr addObject:@(i)];
+            
+            /*
+               排他控制处理结束，所以通过dispatch_semaphore_signal函数将Dispatch Semaphore
+             的计数值增加的线程，就由最先等待的线程执行。
+             */
+            dispatch_semaphore_signal(semaphore);
+            
+        });
+    }
+}
+#pragma mark dispatch_once
+/*
+ static dispatch_once_t pred;
+ dispatch_once(pred, ^{
+ //初始化
+ });
+ */
+#pragma mark  Dispatch I/O
+/*
+  分割读取大文件
+  dispatch_io_create
+ dispatch_io_set_low_water
+ ....
+
+ */
+#pragma mark Dispatch source
+-(void)dispatchSource{
+    /*
+     Dispatch source 可处理事件
+      定时器例子
+     */
+    
+    dispatch_source_t timer = dispatch_source_create(DISPATCH_SOURCE_TYPE_TIMER, 0, 0, dispatch_get_main_queue());
+    
+    /*
+       将定时器设定为15秒后
+     不指定为重复
+     允许延迟1秒
+     */
+    dispatch_source_set_timer(timer, dispatch_time(DISPATCH_TIME_NOW, 2ull*NSEC_PER_SEC),DISPATCH_TIME_FOREVER , 1ull*NSEC_PER_SEC);//
+    
+    /*
+      指定定时器指定时间内执行的处理
+     */
+    dispatch_source_set_event_handler(timer, ^{
+        NSLog(@"dingshiqi qidongle ....");
+        /*
+          取消 Dispatch source
+         */
+        dispatch_source_cancel(timer);
+    });
+    
+    /*
+       指定取消  Dispatch source时的处理
+     */
+    
+    dispatch_source_set_cancel_handler(timer, ^{
+        NSLog(@"cannel...");
+
+
+    });
+    dispatch_resume(timer);
 }
 @end
