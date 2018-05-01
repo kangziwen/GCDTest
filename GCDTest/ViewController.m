@@ -450,17 +450,21 @@ static dispatch_time_t getDispatchTimeByDate( NSDate *date){
      不指定为重复
      允许延迟1秒
      */
-    dispatch_source_set_timer(timer, dispatch_time(DISPATCH_TIME_NOW, 2ull*NSEC_PER_SEC),DISPATCH_TIME_FOREVER , 1ull*NSEC_PER_SEC);//
-    
+//    dispatch_source_set_timer(timer, dispatch_time(DISPATCH_TIME_NOW, 2ull*NSEC_PER_SEC),DISPATCH_TIME_FOREVER , 1ull*NSEC_PER_SEC);//
+    dispatch_source_set_timer(timer,0,  2ull*NSEC_PER_SEC, 0);
+
     /*
       指定定时器指定时间内执行的处理
      */
+    static int ii=0;
     dispatch_source_set_event_handler(timer, ^{
         NSLog(@"dingshiqi qidongle ....");
         /*
           取消 Dispatch source
          */
-        dispatch_source_cancel(timer);
+        ii++;
+        if(ii==10)
+            dispatch_source_cancel(timer);
     });
     
     /*
